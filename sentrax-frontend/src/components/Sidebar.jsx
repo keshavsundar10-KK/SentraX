@@ -6,6 +6,7 @@ import {
   ShieldAlert,
   BarChart3,
   Activity,
+  User,
 } from "lucide-react";
 
 const links = [
@@ -14,6 +15,7 @@ const links = [
   { name: "Tasks", path: "/tasks", icon: ListChecks },
   { name: "Security Events", path: "/security-events", icon: ShieldAlert },
   { name: "Analytics", path: "/analytics", icon: BarChart3 },
+  { name: "Profile", path: "/profile", icon: User },
 ];
 
 export default function Sidebar() {

@@ -1,68 +1,74 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  Activity,
-  CheckCircle2,
-  ShieldAlert,
-  Zap,
-  RefreshCw,
+  Activity, BarChart3, CheckCircle2, Clock3, LayoutDashboard,
+  ListTodo, Menu, RefreshCw, ShieldAlert, ShieldCheck, X, User,
 } from "lucide-react";
 
-import Sidebar from "../components/Sidebar";
-import Navbar from "../components/Navbar";
-import StatCard from "../components/StatCard";
-import SecurityAlert from "../components/SecurityAlert";
-import api from "../services/api";
+const API = "/api";
 
-function formatTime(value) {
-  if (!value) return "Recently";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Recently";
+const navigation = [
+  { name: "Dashboard", path: "/", icon: LayoutDashboard },
+  { name: "Tasks", path: "/tasks", icon: ListTodo },
+  { name: "Live Demo", path: "/live-demo", icon: Activity },
+  { name: "Security Events", path: "/security-events", icon: ShieldCheck },
+  { name: "Analytics", path: "/analytics", icon: BarChart3 },
+  { name: "Profile", path: "/profile", icon: User },
+];
 
-  return date.toLocaleString();
+function Sidebar({ mobile = false, onNavigate }) {
+  return (
+    <aside className={`flex h-full flex-col border-r border-slate-200 bg-white ${mobile ? "w-full" : "w-64"}`}>
+      <div className="flex h-[76px] items-center gap-3 border-b border-slate-100 px-5">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white"><ShieldCheck size={22} /></div>
+        <div><h2 className="text-lg font-bold text-slate-900">SentraX</h2><p className="text-xs text-slate-500">Security workspace</p></div>
+        {mobile && <button onClick={onNavigate} className="ml-auto rounded-lg p-2 text-slate-500"><X size={19} /></button>}
+      </div>
+      <nav className="flex-1 space-y-1 px-4 py-7">
+        <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Workspace</p>
+        {navigation.map(({ name, path, icon: Icon }) => {
+          const active = window.location.pathname === path;
+          return <a key={path} href={path} onClick={onNavigate} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}><Icon size={19} />{name}{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-600" />}</a>;
+        })}
+      </nav>
+      <div className="border-t border-slate-100 p-5"><p className="text-sm text-slate-600">● Workspace ready</p><p className="mt-2 text-xs text-slate-400">SentraX MVP</p></div>
+    </aside>
+  );
 }
 
-function alertType(event) {
-  if (event.decision === "BLOCK") {
-    return "Security Action Blocked";
-  }
-  if (event.decision === "FLAG") {
-    return "Action Requires Review";
-  }
-  return "Action Allowed";
+function timeLabel(value) {
+  if (!value) return "Time unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Time unavailable" : date.toLocaleString();
 }
 
 export default function Dashboard() {
-  const [metrics, setMetrics] = useState({
-    totalEvents: 0,
-    allowCount: 0,
-    flagCount: 0,
-    blockCount: 0,
-  });
-
   const [tasks, setTasks] = useState([]);
   const [events, setEvents] = useState([]);
+  const [metrics, setMetrics] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const loadDashboard = useCallback(async () => {
     try {
       setError("");
-
-      const [metricsData, taskData, eventData] = await Promise.all([
-        api.getSecurityMetrics(),
-        api.getTasks(),
-        api.getSecurityEvents(),
+      const responses = await Promise.all([
+        fetch(`${API}/tasks`, { credentials: "include" }),
+        fetch(`${API}/security/events`, { credentials: "include" }),
+        fetch(`${API}/security/metrics`, { credentials: "include" }),
       ]);
+      const failed = responses.find(response => !response.ok);
+      if (failed) throw new Error(`Dashboard request failed (${failed.status}).`);
 
-      setMetrics(metricsData);
-      setTasks(taskData);
-      setEvents(eventData);
+      const [taskData, eventData, metricData] = await Promise.all(responses.map(r => r.json()));
+      setTasks(Array.isArray(taskData) ? taskData : []);
+      setEvents(Array.isArray(eventData) ? eventData : []);
+      setMetrics(metricData && typeof metricData === "object" ? metricData : {});
+      setLastUpdated(new Date());
     } catch (err) {
-      setError(
-        err.message ||
-          "Could not load live data. Check that the backend is running."
-      );
+      setError(err.message || "Dashboard data could not be loaded.");
     } finally {
       setLoading(false);
     }
@@ -70,230 +76,54 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboard();
-
-    const intervalId = window.setInterval(loadDashboard, 15000);
-    return () => window.clearInterval(intervalId);
+    const timer = window.setInterval(loadDashboard, 15000);
+    const onFocus = () => loadDashboard();
+    const onUpdate = () => loadDashboard();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("sentrax-tasks-updated", onUpdate);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("sentrax-tasks-updated", onUpdate);
+    };
   }, [loadDashboard]);
 
-  const recentAlerts = events.slice(0, 5).map((event) => ({
-    type: alertType(event),
-    message: event.reason,
-    status:
-      event.decision === "BLOCK"
-        ? "BLOCKED"
-        : event.decision === "FLAG"
-          ? "FLAGGED"
-          : "ALLOWED",
-    time: formatTime(event.createdAt),
-  }));
+  const completed = tasks.filter(t => ["completed", "success", "successful"].includes(String(t.status ?? t.state ?? "").toLowerCase())).length;
+  const highEvents = events.filter(e => ["critical", "high", "error"].includes(String(e.severity ?? e.level ?? e.status ?? "").toLowerCase())).length;
+
+  const stats = [
+    { label: "Total tasks", value: tasks.length || metrics.totalTasks || metrics.total_tasks || 0, icon: ListTodo, tone: "bg-blue-50 text-blue-600" },
+    { label: "Completed tasks", value: completed, icon: CheckCircle2, tone: "bg-emerald-50 text-emerald-600" },
+    { label: "Security events", value: events.length || metrics.totalEvents || metrics.total_events || 0, icon: Activity, tone: "bg-violet-50 text-violet-600" },
+    { label: "High severity", value: highEvents || metrics.highSeverity || metrics.high_severity || 0, icon: ShieldAlert, tone: "bg-rose-50 text-rose-600" },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-gray-900">
-      <Sidebar />
-
-      <div className="ml-64">
-        <Navbar />
-
-        <main className="p-8">
-          <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    error ? "bg-red-500" : "bg-emerald-500"
-                  }`}
-                />
-                <span
-                  className={`text-xs font-medium uppercase tracking-widest ${
-                    error ? "text-red-600" : "text-emerald-600"
-                  }`}
-                >
-                  {error ? "Connection Issue" : "Security Monitoring"}
-                </span>
-              </div>
-
-              <h1 className="mt-3 text-3xl font-bold tracking-tight text-gray-900">
-                Security Dashboard
-              </h1>
-
-              <p className="mt-2 text-sm text-gray-500">
-                Live monitoring of SentraX task and security activity.
-              </p>
+    <div className="min-h-screen bg-slate-50/80">
+      <div className="fixed inset-y-0 left-0 z-30 hidden md:block"><Sidebar /></div>
+      {mobileMenuOpen && <div className="fixed inset-0 z-50 md:hidden"><button aria-label="Close menu" onClick={() => setMobileMenuOpen(false)} className="absolute inset-0 bg-slate-950/30" /><div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] shadow-xl"><Sidebar mobile onNavigate={() => setMobileMenuOpen(false)} /></div></div>}
+      <div className="min-h-screen md:pl-64">
+        <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3"><button onClick={() => setMobileMenuOpen(true)} aria-label="Open menu" className="rounded-xl border border-slate-200 p-2 text-slate-600 md:hidden"><Menu size={20} /></button><div><p className="text-sm font-semibold text-slate-900">Security workspace</p><p className="mt-1 text-xs text-slate-500">Monitor your SentraX activity</p></div></div>
+          <button onClick={loadDashboard} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><RefreshCw size={15} />Refresh</button>
+        </header>
+        <main className="space-y-7 px-4 py-6 sm:px-6 lg:px-8">
+          <div><p className="text-sm font-medium text-blue-600">Workspace overview</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Dashboard</h1><p className="mt-1 text-sm text-slate-500">A live overview of tasks and security activity.</p></div>
+          {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}<button onClick={loadDashboard} className="ml-2 underline">Retry</button></div>}
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {stats.map(({ label, value, icon: Icon, tone }) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300"><div className="flex items-center justify-between"><p className="text-sm text-slate-500">{label}</p><span className={`rounded-xl p-2.5 ${tone}`}><Icon size={19} /></span></div><p className="mt-4 text-3xl font-semibold text-slate-900">{loading ? "—" : value}</p><p className="mt-2 text-xs text-slate-500">Based on available API data</p></div>)}
+          </section>
+          <section className="grid gap-6 lg:grid-cols-5">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white lg:col-span-3">
+              <div className="border-b border-slate-100 px-5 py-4"><h2 className="font-semibold text-slate-900">Recent tasks</h2><p className="mt-1 text-sm text-slate-500">Latest records returned by your API</p></div>
+              {loading ? <p className="p-6 text-sm text-slate-500">Loading tasks…</p> : tasks.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No tasks found. Try running a Live Demo.</p> : <div className="divide-y divide-slate-100">{tasks.slice(0, 6).map((task, index) => { const id = task.id ?? task.taskId ?? task.task_id ?? index; const title = task.name ?? task.title ?? task.originalIntent ?? task.original_intent ?? task.intent ?? `Task ${index + 1}`; const status = String(task.status ?? task.state ?? "Pending"); const tone = ["completed", "success", "successful"].includes(status.toLowerCase()) ? "bg-emerald-50 text-emerald-700" : ["blocked", "failed", "denied", "error"].includes(status.toLowerCase()) ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600"; return <div key={id} className="flex items-center justify-between gap-3 px-5 py-4"><div className="flex min-w-0 items-center gap-3"><span className="rounded-lg bg-slate-100 p-2 text-slate-600"><Activity size={16} /></span><div className="min-w-0"><p className="truncate text-sm font-medium text-slate-800">{title}</p><p className="mt-1 text-xs text-slate-400">ID: {id}</p></div></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs capitalize ${tone}`}>{status.replaceAll("_", " ")}</span></div>; })}</div>}
             </div>
-
-            <button
-              type="button"
-              onClick={loadDashboard}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw size={15} />
-              Refresh
-            </button>
-          </div>
-
-          {error && (
-            <div
-              role="alert"
-              className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-            >
-              {error}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white lg:col-span-2">
+              <div className="border-b border-slate-100 px-5 py-4"><h2 className="font-semibold text-slate-900">Recent security events</h2><p className="mt-1 text-sm text-slate-500">Latest event records</p></div>
+              {loading ? <p className="p-6 text-sm text-slate-500">Loading events…</p> : events.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No security events returned.</p> : <div className="divide-y divide-slate-100">{events.slice(0, 5).map((event, index) => <div key={event.id ?? index} className="px-5 py-4"><div className="flex justify-between gap-3"><p className="text-sm font-medium text-slate-800">{event.type ?? event.eventType ?? event.event_type ?? event.name ?? "Security event"}</p><span className="text-xs text-slate-500">{event.severity ?? event.level ?? "Info"}</span></div><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{event.description ?? event.message ?? event.details ?? "No description provided"}</p><p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400"><Clock3 size={12} />{timeLabel(event.timestamp ?? event.createdAt ?? event.created_at)}</p></div>)}</div>}
             </div>
-          )}
-
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              title="Registered Tasks"
-              value={loading ? "…" : tasks.length}
-              change="Tasks saved in the database"
-              icon={Activity}
-            />
-
-            <StatCard
-              title="Allowed Actions"
-              value={loading ? "…" : metrics.allowCount}
-              change="Recorded ALLOW decisions"
-              icon={CheckCircle2}
-            />
-
-            <StatCard
-              title="Blocked Actions"
-              value={loading ? "…" : metrics.blockCount}
-              change={`${metrics.flagCount} flagged for review`}
-              icon={ShieldAlert}
-              danger
-            />
-
-            <StatCard
-              title="Total Evaluations"
-              value={loading ? "…" : metrics.totalEvents}
-              change="Saved security events"
-              icon={Zap}
-            />
-          </div>
-
-          <div className="mt-6 grid gap-6 xl:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm xl:col-span-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold text-gray-900">
-                    Security Activity
-                  </h2>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Most recent decisions recorded by SentraX
-                  </p>
-                </div>
-
-                <div className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-medium text-cyan-600">
-                  LIVE
-                </div>
-              </div>
-
-              <div className="mt-5">
-                {recentAlerts.length ? (
-                  recentAlerts.map((alert, index) => (
-                    <SecurityAlert key={events[index]?.id ?? index} {...alert} />
-                  ))
-                ) : (
-                  <p className="py-8 text-center text-sm text-gray-500">
-                    {loading
-                      ? "Loading security events…"
-                      : "No events recorded yet. Evaluate an action in the Live Demo to begin."}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="font-semibold text-gray-900">
-                Protection Status
-              </h2>
-
-              <p className="mt-1 text-xs text-gray-500">
-                Backend connectivity and recorded decisions
-              </p>
-
-              <div className="mt-8 flex flex-col items-center">
-                <div className="flex h-28 w-28 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50">
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full border border-emerald-200 bg-emerald-100">
-                    <ShieldAlert size={32} className="text-emerald-600" />
-                  </div>
-                </div>
-
-                <h3 className="mt-5 text-xl font-semibold text-emerald-600">
-                  {error ? "Connection Issue" : "Monitoring Active"}
-                </h3>
-
-                <p className="mt-2 text-center text-xs leading-5 text-gray-500">
-                  {error
-                    ? "SentraX could not retrieve current backend data."
-                    : "Rule-based security evaluation and database event logging are available."}
-                </p>
-              </div>
-
-              <div className="mt-8 space-y-3">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Flagged actions</span>
-                  <span className="font-medium text-gray-900">
-                    {metrics.flagCount}
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                  <div
-                    className="h-full rounded-full bg-amber-400 transition-all"
-                    style={{
-                      width: `${
-                        metrics.totalEvents
-                          ? (metrics.flagCount / metrics.totalEvents) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-                <p className="text-xs text-gray-400">
-                  {metrics.totalEvents
-                    ? `${Math.round(
-                        (metrics.blockCount / metrics.totalEvents) * 100
-                      )}% of recorded events were blocked.`
-                    : "No evaluations recorded yet."}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="font-semibold text-gray-900">Recent Tasks</h2>
-            <p className="mt-1 text-xs text-gray-500">
-              Original user intents registered with SentraX
-            </p>
-
-            {tasks.length === 0 ? (
-              <p className="mt-5 text-sm text-gray-500">
-                No tasks registered yet. Open Tasks to create one.
-              </p>
-            ) : (
-              <div className="mt-4 divide-y divide-gray-100">
-                {tasks.slice(0, 5).map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex flex-wrap items-start justify-between gap-3 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">
-                        #{task.id} · {task.title}
-                      </p>
-                      <p className="mt-1 max-w-2xl text-xs leading-5 text-gray-500">
-                        {task.originalIntent}
-                      </p>
-                    </div>
-                    <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
-                      {task.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          </section>
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center"><div className="flex items-center gap-3"><span className={`rounded-xl p-3 ${error ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}><ShieldCheck size={21} /></span><div><p className="font-semibold text-slate-900">API connection</p><p className="mt-1 text-sm text-slate-500">{error ? "One or more dashboard endpoints could not be reached." : "Dashboard data loaded successfully."}</p></div></div><p className="text-xs text-slate-400">{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : "Waiting for data"}</p></div>
         </main>
       </div>
     </div>
