@@ -12,6 +12,71 @@ SentraX is a web application built using a modern frontend, a Java backend, and 
 
 ## 💡 Important: SentraX Is Live!
 
+## 🛡️ What Is SentraX?
+
+**SentraX is a security monitoring and event management dashboard designed to bring security-related information into one place.**
+
+It provides a centralized interface for monitoring security events, reviewing security metrics, viewing analytics, and organizing related tasks. Instead of treating security information as isolated data, SentraX aims to make it easier to understand activity, track issues, and maintain visibility into the security status of a system.
+
+The project combines a React-based dashboard with a Spring Boot backend and a PostgreSQL database to demonstrate how a security-focused monitoring application can be built and deployed.
+
+## 🎯 Problem Statement
+
+Security-related information can be difficult to review when events, metrics, alerts, and follow-up tasks are spread across different places. This can make it harder to identify important activity, understand trends, and keep track of issues that require attention.
+
+SentraX aims to address this challenge by providing a centralized dashboard for viewing security information and organizing security-related work.
+
+## 💡 Project Objectives
+
+- Provide a centralized dashboard for security-related information.
+- Display security metrics and analytics in an accessible format.
+- Allow users to review security events.
+- Support the organization and tracking of security-related tasks.
+- Provide user authentication and protected access to the application.
+- Connect the frontend, backend APIs, and database in a full-stack architecture.
+- Make the application accessible through a cloud-hosted deployment.
+
+## ✨ Core Features
+
+### 1. Security Dashboard
+A central view for presenting security information, summary cards, and relevant monitoring data.
+
+### 2. Security Event Monitoring
+A dedicated interface for viewing and reviewing security events returned by the backend.
+
+### 3. Security Metrics and Analytics
+Dashboard metrics and analytics views that help users understand security-related data and trends.
+
+### 4. Task Management
+A task-oriented interface for organizing and tracking related work.
+
+### 5. User Authentication
+Account registration, login, and session-based authentication.
+
+### 6. User and Profile Management
+User-related pages and account management capabilities, depending on the functionality enabled in the application.
+
+### 7. Cloud-Based Architecture
+A React frontend hosted on Vercel, a Spring Boot API hosted on Render, and a PostgreSQL database hosted on Neon.
+
+## 🔄 How SentraX Works
+
+1. A user opens the SentraX web application and signs in.
+2. The frontend communicates with the Spring Boot backend through API requests.
+3. The backend processes requests and retrieves or updates the relevant database records.
+4. Security events, metrics, analytics, and task information are presented through the dashboard.
+5. The user reviews the available information and uses the relevant application features to manage their work.
+
+## 👥 Intended Users
+
+SentraX is intended as a security monitoring and management project for users who need a centralized interface for reviewing security events and related information. Its suitability for real-world security operations depends on the monitoring integrations, event sources, and security controls implemented.
+
+## 🚧 Project Scope and Limitations
+
+SentraX provides a foundation for a security monitoring dashboard. Features such as automated threat detection, real-time event ingestion, notifications, integrations with external security tools, and incident response automation should only be described as available when they have been implemented and verified.
+
+The project can be extended with additional data sources, detection rules, reporting, alerting, and monitoring capabilities.
+
 **SentraX is deployed and available to try.** 🚀
 
 If you're visiting the application for the first time, or if it has been inactive for a while, signing up or logging in may take longer than usual.
